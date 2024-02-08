@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { defineProps, ref, watchEffect, withDefaults } from 'vue'
+import { ref, watchEffect, withDefaults } from 'vue'
 
 type Props = {
   label?: string
-  modelValue: bool
+  modelValue: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {})
@@ -23,6 +23,7 @@ watchEffect(() => {
   toggleState.value = props.modelValue
 })
 </script>
+
 <template>
   <div>
     <label class="mb-2 mt-4 block px-2 text-sm font-medium" v-if="label">

@@ -1,5 +1,6 @@
-import axios, { AxiosInstance, AxiosResponse } from 'axios'
 import { ref } from 'vue'
+import { baseUrl } from './appConfig.ts'
+import { Message } from './database.ts'
 
 export type GenerateCompletionRequest = {
   model: string
@@ -45,12 +46,13 @@ export type CreateModelResponse = {
   status: string
 }
 
+export type Model = {
+  name: string
+  modified_at: string
+  size: number
+}
 export type ListLocalModelsResponse = {
-  models: {
-    name: string
-    modified_at: string
-    size: number
-  }[]
+  models: Model[]
 }
 
 export type ShowModelInformationRequest = {
@@ -111,19 +113,13 @@ export type GenerateEmbeddingsResponse = {
   embeddings: number[]
 }
 
-// Define the base URL for the API
-const API_BASE_URL = 'http://localhost:11434/api'
+// Define a method to get the full API URL for a given path
+const getApiUrl = (path: string) =>
+  `${baseUrl.value || 'http://localhost:11434/api'}${path}`
 
-// Create an Axios instance
-const apiClient: AxiosInstance = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-})
-
+const abortController = ref<AbortController>(new AbortController())
+const signal = ref<AbortSignal>(abortController.value.signal)
 // Define the API client functions
-
 export const useApi = () => {
   const error = ref(null)
 
@@ -131,121 +127,155 @@ export const useApi = () => {
     request: GenerateCompletionRequest,
     onDataReceived: (data: GenerateCompletionResponse) => void,
   ): Promise<GenerateCompletionResponse[]> => {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/generate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(request),
-        })
-
-        if (!res.ok) {
-          reject('Network response was not ok')
-          return
-        }
-
-        const reader = res.body?.getReader()
-        let results: GenerateCompletionResponse[] = []
-
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) {
-              break
-            }
-
-            const chunk = new TextDecoder().decode(value)
-            const parsedChunk: GenerateCompletionPartResponse = JSON.parse(chunk)
-
-            onDataReceived(parsedChunk)
-            results.push(parsedChunk)
-          }
-        }
-
-        resolve(results)
-      } catch (err) {
-        reject(err)
-      }
+    const res = await fetch(getApiUrl('/generate'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+      signal: signal.value,
     })
+
+    if (!res.ok) {
+      throw new Error('Network response was not ok')
+    }
+
+    const reader = res.body?.getReader()
+    let results: GenerateCompletionResponse[] = []
+
+    if (reader) {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) {
+          break
+        }
+
+        const chunk = new TextDecoder().decode(value)
+        const parsedChunk: GenerateCompletionPartResponse = JSON.parse(chunk)
+
+        onDataReceived(parsedChunk)
+        results.push(parsedChunk)
+      }
+    }
+
+    return results
   }
 
   // Create a model
   const createModel = async (
     request: CreateModelRequest,
   ): Promise<CreateModelResponse> => {
-    const response: AxiosResponse<CreateModelResponse> = await apiClient.post(
-      '/create',
-      request,
-    )
-    return response.data
+    const response = await fetch(getApiUrl('/create'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    return await response.json()
   }
 
   // List local models
   const listLocalModels = async (): Promise<ListLocalModelsResponse> => {
-    const response: AxiosResponse<ListLocalModelsResponse> = await apiClient.get('/tags')
-    return response.data
+    const response = await fetch(getApiUrl('/tags'), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    return await response.json()
   }
 
   // Show model information
   const showModelInformation = async (
     request: ShowModelInformationRequest,
   ): Promise<ShowModelInformationResponse> => {
-    const response: AxiosResponse<ShowModelInformationResponse> = await apiClient.post(
-      '/show',
-      request,
-    )
-    return response.data
+    const response = await fetch(getApiUrl('/show'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    return await response.json()
   }
 
   // Copy a model
   const copyModel = async (request: CopyModelRequest): Promise<CopyModelResponse> => {
-    const response: AxiosResponse<CopyModelResponse> = await apiClient.post(
-      '/copy',
-      request,
-    )
-    return response.data
+    const response = await fetch(getApiUrl('/copy'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    return await response.json()
   }
 
   // Delete a model
   const deleteModel = async (
     request: DeleteModelRequest,
   ): Promise<DeleteModelResponse> => {
-    const response: AxiosResponse<DeleteModelResponse> = await apiClient.delete(
-      '/delete',
-      { data: request },
-    )
-    return response.data
+    const response = await fetch(getApiUrl('/delete'), {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    return await response.json()
   }
 
   // Pull a model
   const pullModel = async (request: PullModelRequest): Promise<PullModelResponse> => {
-    const response: AxiosResponse<PullModelResponse> = await apiClient.post(
-      '/pull',
-      request,
-    )
-    return response.data
+    const response = await fetch(getApiUrl('/pull'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+    return await response.json()
   }
 
   // Push a model
   const pushModel = async (request: PushModelRequest): Promise<PushModelResponse> => {
-    const response: AxiosResponse<PushModelResponse> = await apiClient.post(
-      '/push',
-      request,
-    )
-    return response.data
+    const response = await fetch(getApiUrl('/push'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    return await response.json()
   }
 
   // Generate embeddings
   const generateEmbeddings = async (
     request: GenerateEmbeddingsRequest,
   ): Promise<GenerateEmbeddingsResponse> => {
-    const response: AxiosResponse<GenerateEmbeddingsResponse> = await apiClient.post(
-      '/embeddings',
-      request,
-    )
-    return response.data
+    const response = await fetch(getApiUrl('/embeddings'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    })
+
+    return await response.json()
+  }
+  const abort = () => {
+    if (abortController.value) {
+      abortController.value.abort()
+      abortController.value = new AbortController()
+      signal.value = abortController.value.signal
+      console.log('Fetch request aborted and controller reset')
+    }
   }
 
   return {
@@ -259,5 +289,6 @@ export const useApi = () => {
     pullModel,
     pushModel,
     generateEmbeddings,
+    abort,
   }
 }

@@ -1,44 +1,57 @@
 <script setup lang="ts">
-import { useAppState } from '../services/store.ts'
-import { storeToRefs } from 'pinia'
-import { computed, watch } from 'vue'
 import { IconRefresh } from '@tabler/icons-vue'
+import { useChats } from '../services/chat.ts'
+import { useAI } from '../services/useAI.ts'
+import { ref } from 'vue'
 
-const { currentChat, availableModels, currentModel } = storeToRefs(useAppState())
-const { changeCurrentModel, fetchAvailableModels } = useAppState()
+const { activeChat, switchModel, hasMessages } = useChats()
+const { refreshModels, availableModels } = useAI()
 
-const currentChatHasMessages = computed(() => currentChat.value?.messages?.length > 0)
+const refreshingModel = ref(false)
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-watch(currentModel, (newModel) => {
-  if (newModel && currentChat.value && currentChat.value.messages.length === 0) {
-    changeCurrentModel(newModel)
-  }
-})
+const performRefreshModel = async () => {
+  refreshingModel.value = true
+  await Promise.all([refreshModels(), sleep(1000)])
+
+  refreshModels().then(() => {
+    refreshingModel.value = false
+  })
+}
+
+const handleModelChange = (event: Event) => {
+  const wip = event.target as HTMLSelectElement
+  console.log('switch', wip.value)
+  switchModel(wip.value)
+}
 </script>
-<template>
-  <div class="mx-auto max-w-md w-full">
-    <div class="px-2 py-4 text-zinc-800 dark:text-zinc-200">
-      <div class="h-10 inline-flex gap-2 items-center">
-        <select
-          :disabled="currentChatHasMessages"
-          v-model="currentModel"
-          class="w-full cursor-pointer rounded-lg border-r-8 border-transparent bg-zinc-200 py-2 h-full pl-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 dark:bg-zinc-700 disabled:opacity-50"
-        >
-          <option :value="undefined" disabled selected>Select a model</option>
-          <option v-for="model in availableModels" :value="model.name">
-            {{ model.name }}
-          </option>
-        </select>
 
-        <button
-          :disabled="currentChatHasMessages"
-          title="Refresh available models"
-          @click="fetchAvailableModels"
-          class="p-3 inline-flex items-center justify-center h-full rounded-lg bg-zinc-200 text-sm focus:outline-none border-none focus:ring-2 focus:ring-blue-600 dark:bg-zinc-700 disabled:opacity-50"
-        >
-          <IconRefresh class="h-5 w-5 text-zinc-500" />
-        </button>
-      </div>
+<template>
+  <div class="flex flex-row text-zinc-800 dark:text-zinc-200">
+    <div class="inline-flex items-center gap-2">
+      <select
+        :disabled="hasMessages"
+        :value="activeChat?.model"
+        @change="handleModelChange"
+        class="w-full cursor-pointer rounded-lg bg-white py-2 pl-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50 dark:bg-zinc-400 dark:text-zinc-900"
+      >
+        <option :value="undefined" disabled selected>Select a model</option>
+        <option v-for="model in availableModels" :value="model.name">
+          {{ model.name }}
+        </option>
+      </select>
+
+      <button
+        :disabled="hasMessages"
+        title="Refresh available models"
+        @click="performRefreshModel"
+        class="inline-flex items-center justify-center rounded-lg border-none bg-zinc-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50 dark:bg-zinc-400 dark:text-zinc-900"
+      >
+        <IconRefresh
+          class="h-4 w-4 -scale-100 text-zinc-500"
+          :class="{ 'animate-spin': refreshingModel }"
+        />
+      </button>
     </div>
   </div>
 </template>

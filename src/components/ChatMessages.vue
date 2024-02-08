@@ -1,43 +1,59 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUpdated, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, onUpdated, ref, watch } from 'vue'
 import ChatMessage from './ChatMessage.vue'
-import { debugMode, useAppState } from '../services/store.ts'
-import { storeToRefs } from 'pinia'
-import ToggleInput from './Inputs/ToggleInput.vue'
+import { useChats } from '../services/chat.ts'
+import { debugMode } from '../services/appConfig.ts'
 
-const { currentChat } = storeToRefs(useAppState())
-
+const { messages } = useChats()
 const chatElement = ref<HTMLElement>()
+const userInterferedWithScroll = ref(false)
+
+const isAtBottom = () => {
+  if (!chatElement.value) return false
+
+  const { scrollTop, scrollHeight, clientHeight } = chatElement.value
+  return scrollHeight - scrollTop <= clientHeight + 10 // 10 is a small threshold
+}
+
+const handleUserScroll = () => {
+  userInterferedWithScroll.value = !isAtBottom()
+}
 
 const scrollToBottom = () => {
+  if (userInterferedWithScroll.value) return
+
   nextTick(() => {
-    const container = chatElement.value
-    if (container) {
-      container.scrollTop = container.scrollHeight
+    if (chatElement.value) {
+      chatElement.value.scrollTop = chatElement.value.scrollHeight
     }
   })
 }
 
 onMounted(() => {
   scrollToBottom()
+  chatElement.value?.addEventListener('scroll', handleUserScroll)
 })
 
-onUpdated(() => {
-  scrollToBottom()
+onUpdated(() => scrollToBottom())
+
+watch(messages, () => {
+  if (isAtBottom()) {
+    userInterferedWithScroll.value = false
+  }
 })
 
-const messages = computed(() =>
-  debugMode.value
-    ? currentChat?.value?.messages
-    : currentChat?.value?.messages.filter((m) => m.role != 'system'),
+onUnmounted(() => chatElement.value?.removeEventListener('scroll', handleUserScroll))
+
+const visibleMessages = computed(() =>
+  debugMode.value ? messages?.value : messages?.value.filter((m) => m.role != 'system'),
 )
 </script>
 
 <template>
   <div
     ref="chatElement"
-    class="flex-1 overflow-y-auto rounded-xl bg-zinc-100 p-4 text-sm leading-6 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-300 sm:text-base sm:leading-7 scroll-smooth"
+    class="flex-1 overflow-y-auto scroll-smooth rounded-xl bg-zinc-100 p-4 text-sm leading-6 text-zinc-900 sm:text-base sm:leading-7 dark:bg-zinc-800 dark:text-zinc-300"
   >
-    <ChatMessage v-for="message in messages" :message="message" />
+    <ChatMessage v-for="message in visibleMessages" :message="message" />
   </div>
 </template>
